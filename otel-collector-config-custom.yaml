@@ -1,0 +1,50 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # Route spans to Galileo projects/logstreams based on service.name.
+  # Application code stays vendor-agnostic — no galileo.* attributes needed.
+  galileo_router:
+    routes:
+      - match:
+          service.name: "python-langgraph-service"
+        project: "${GALILEO_PROJECT}"
+        logstream: "python-service"
+      - match:
+          service.name: "otel-ts-collector-demo"
+        project: "${GALILEO_PROJECT}"
+        logstream: "ts-service"
+    default_route:
+      project_from_attribute: "service.name"
+      logstream_from_attribute: "deployment.environment"
+      logstream_default: "default"
+
+  batch:
+    timeout: 5s
+    send_batch_size: 512
+
+exporters:
+  # Galileo exporter — just api_key, endpoint auto-configured.
+  galileo:
+    api_key: "${GALILEO_API_KEY}"
+    endpoint: "${GALILEO_CONSOLE_URL}"
+
+  # Debug exporter — prints span summaries to collector stdout.
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [galileo_router, batch]
+      exporters: [galileo, debug]
+
+  telemetry:
+    logs:
+      level: info
